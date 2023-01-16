@@ -18,6 +18,14 @@
 #ifdef OPENCV
 
 #include "http_stream.h"
+#include "j_header.h"
+
+#if defined SYNC || defined ASYNC || defined TWO_STAGE
+int mem_arr[3][2000]={0,};
+int base_mTOT=0;
+int base_mCPU=0;
+int base_mGPU=0;
+#endif
 
 static char **demo_names;
 static image **demo_alphabet;
@@ -140,6 +148,105 @@ double get_wall_time()
     return (double)walltime.tv_sec + (double)walltime.tv_usec * .000001;
 }
 
+#if defined SYNC || defined ASYNC || defined TWO_STAGE
+void printMEM()
+{
+    char cmd[1024];
+    int nMemTot =0;
+    int nMemAva =0;
+    int nMapMem =0;
+    int mCPU, mGPU, mTOT;
+
+    sprintf(cmd, "/proc/meminfo");
+    FILE *fp = fopen(cmd, "r");
+    if(fp == NULL) return;
+    while(fgets(cmd, 1024, fp) != NULL) {
+        if(strstr(cmd, "MemTotal"))  {
+            char t[32];
+            char size[32];
+            sscanf(cmd, "%s%s", t, size);
+            nMemTot = atoi(size);
+        }
+        else if(strstr(cmd, "MemAvailable")) {
+            char t[32];
+            char size[32];
+            sscanf(cmd, "%s%s", t, size);
+            nMemAva = atoi(size);
+        }
+        else if(strstr(cmd, "NvMapMemUsed")) {
+            char t[32];
+            char size[32];
+            sscanf(cmd, "%s%s", t, size);
+            nMapMem = atoi(size);
+            break;
+        }
+    }
+    fclose(fp);
+
+    mTOT = (nMemTot - nMemAva);
+    mGPU = nMapMem;
+    mCPU = mTOT - mGPU;
+
+    base_mTOT = mTOT/1024;
+    base_mCPU = mCPU/1024;
+    base_mGPU = mGPU/1024;
+
+    printf("mTOT: %dkB (=%dMB)\n",mTOT,mTOT/1024);
+    printf("mCPU: %dkB (=%dMB)\n",mCPU,mCPU/1024);
+    printf("mGPU: %dkB (=%dMB)\n",mGPU,mGPU/1024);
+
+}
+
+void mem()
+{
+    char cmd[1024];
+    int nMemTot =0;
+    int nMemAva =0;
+    int nMapMem =0;
+    int mCPU, mGPU, mTOT;
+    static int count =0;
+
+    sprintf(cmd, "/proc/meminfo");
+    FILE *fp = fopen(cmd, "r");
+    if(fp == NULL) return;
+    while(fgets(cmd, 1024, fp) != NULL) {
+        if(strstr(cmd, "MemTotal"))  {
+            char t[32];
+            char size[32];
+            sscanf(cmd, "%s%s", t, size);
+            nMemTot = atoi(size);
+        }
+        else if(strstr(cmd, "MemAvailable")) {
+            char t[32];
+            char size[32];
+            sscanf(cmd, "%s%s", t, size);
+            nMemAva = atoi(size);
+        }
+        else if(strstr(cmd, "NvMapMemUsed")) {
+            char t[32];
+            char size[32];
+            sscanf(cmd, "%s%s", t, size);
+            nMapMem = atoi(size);
+            break;
+        }
+    }
+    fclose(fp);
+
+    mTOT = (nMemTot - nMemAva);
+    mGPU = nMapMem;
+    mCPU = mTOT - mGPU;
+
+    mem_arr[0][count]=mTOT/1024;
+    mem_arr[1][count]=mCPU/1024;
+    mem_arr[2][count]=mGPU/1024;
+    count++;
+    printf("mTOT: %dkB (=%dMB)\n",mTOT,mTOT/1024);
+    printf("mCPU: %dkB (=%dMB)\n",mCPU,mCPU/1024);
+    printf("mGPU: %dkB (=%dMB)\n",mGPU,mGPU/1024);
+
+}
+#endif
+
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
     int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
@@ -160,14 +267,25 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     printf("Demo\n");
     net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
     if(weightfile){
+        net.weights_file_name = weightfile;
+
+#ifndef TWO_STAGE
         load_weights(&net, weightfile);
+#else
+#ifndef ONDEMAND_LOAD
+        load_weights(&net, weightfile);
+#endif
+#endif //Not TWO_STAGE
+
     }
     if (net.letter_box) letter_box = 1;
     net.benchmark_layers = benchmark_layers;
+#ifndef ONDEMAND_LOAD
     fuse_conv_batchnorm(net);
     calculate_binary_weights(net);
+#endif //ONDEMAND_LOAD
     srand(2222222);
-
+    
     if(filename){
         printf("video file: %s\n", filename);
         cap = get_capture_video_stream(filename);
@@ -221,6 +339,9 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     det_img = in_img;
     det_s = in_s;
 
+    int count = 0;
+    printf("count %d\n",count);
+
     for (j = 0; j < avg_frames / 2; ++j) {
         free_detections(dets, nboxes);
         fetch_in_thread_sync(0); //fetch_in_thread(0);
@@ -229,10 +350,10 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         det_s = in_s;
     }
 
-    int count = 0;
+
     if(!prefix && !dont_show){
         int full_screen = 0;
-        create_window_cv("Demo", full_screen, 1352, 1013);
+        create_window_cv("Demo", full_screen, 640, 480);
     }
 
 
@@ -261,6 +382,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     int frame_counter = 0;
     int global_frame_counter = 0;
 
+
     while(1){
         ++count;
         {
@@ -268,6 +390,8 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             int local_nboxes = nboxes;
             detection *local_dets = dets;
             this_thread_yield();
+            //printf("count %d\n",count);
+            //if(count == 1000) flag_exit = 1;
 
             if (!benchmark) custom_atomic_store_int(&run_fetch_in_thread, 1); // if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
             custom_atomic_store_int(&run_detect_in_thread, 1); // if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
@@ -283,7 +407,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             //printf("\033[2J");
             //printf("\033[1;1H");
             //printf("\nFPS:%.1f\n", fps);
-            printf("Objects:\n\n");
+            //printf("Objects:\n\n");
 
             ++frame_id;
             if (demo_json_port > 0) {
@@ -344,12 +468,12 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             }
 
             while (custom_atomic_load_int(&run_detect_in_thread)) {
-                if(avg_fps > 50) this_thread_yield();
+                if(avg_fps > 180) this_thread_yield();
                 else this_thread_sleep_for(thread_wait_ms);   // custom_join(detect_thread, 0);
             }
             if (!benchmark) {
                 while (custom_atomic_load_int(&run_fetch_in_thread)) {
-                    if (avg_fps > 50) this_thread_yield();
+                    if (avg_fps > 180) this_thread_yield();
                     else this_thread_sleep_for(thread_wait_ms);   // custom_join(fetch_thread, 0);
                 }
                 free_image(det_s);
@@ -405,6 +529,15 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     // free memory
     free_image(in_s);
     free_detections(dets, nboxes);
+
+#ifdef ASYNC
+	//free buffer & cudaEvent
+	free(hGlobal_layer_weights);
+	cudaFree(global_layer_weights);
+	cudaEventDestroy(copyEvent);
+	for(int k = 0; k<net.n; k++) cudaEventDestroy(kernel[k]);
+#endif
+
 
     demo_index = (avg_frames + demo_index - 1) % avg_frames;
     for (j = 0; j < avg_frames; ++j) {
