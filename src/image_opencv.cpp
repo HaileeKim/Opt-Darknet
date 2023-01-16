@@ -1,6 +1,8 @@
 #include "image_opencv.h"
 #include <iostream>
 
+#include "v4l2.h"
+
 #ifdef OPENCV
 #include "utils.h"
 
@@ -454,22 +456,49 @@ static float get_pixel(image m, int x, int y, int c)
 }
 // ----------------------------------------
 
-extern "C" void show_image_cv(image p, const char *name)
+extern "C" int show_image_cv(image p, const char *name)
 {
-    try {
-        image copy = copy_image(p);
-        constrain_image(copy);
+	//        cv::Mat m = image_to_mat(p);
+	//        cv::imshow(name, m);
+	//        int c = cv::waitKey(1);
+	//        if (c != -1) c = c%256;
+	double waitkey_start;
+	extern double b_disp;
 
-        cv::Mat mat = image_to_mat(copy);
-        if (mat.channels() == 3) cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
-        else if (mat.channels() == 4) cv::cvtColor(mat, mat, cv::COLOR_RGBA2BGR);
-        cv::namedWindow(name, cv::WINDOW_NORMAL);
-        cv::imshow(name, mat);
-        free_image(copy);
-    }
-    catch (...) {
-        cerr << "OpenCV exception: show_image_cv \n";
-    }
+    cv::Mat m = image_to_mat(p);
+    if (m.channels() == 3) cv::cvtColor(m, m, cv::COLOR_RGB2BGR);
+    else if (m.channels() == 4) cv::cvtColor(m, m, cv::COLOR_RGBA2BGR);
+    cv::imshow(name, m);
+    waitkey_start = get_time_in_ms();
+    int c = cv::waitKey(1);
+    b_disp = get_time_in_ms() - waitkey_start;
+    //if(c!= -1) c = c%256;
+    return c;
+
+	// try {
+	//     image copy = copy_image(p);
+	//     constrain_image(copy);
+
+	//     cv::Mat mat = image_to_mat(copy);
+	//     //printf("mat channels : %d", mat.channels()); //3
+	//     if (mat.channels() == 3) cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
+	//     else if (mat.channels() == 4) cv::cvtColor(mat, mat, cv::COLOR_RGBA2BGR);
+	//     //cv::namedWindow(name, cv::WINDOW_NORMAL);
+	//     cv::imshow(name, mat);
+
+	//     waitkey_start = get_time_in_ms();
+	//     //int c = wait_key_cv(1);
+	//     int c = cv::waitKey(1);
+	//     b_disp = get_time_in_ms() - waitkey_start;
+
+	//     free_image(copy);
+
+	//     return c;
+	// }
+	// catch (...) {
+	//     cerr << "OpenCV exception: show_image_cv \n";
+	// }
+	// return 1;
 }
 // ----------------------------------------
 
@@ -600,13 +629,30 @@ extern "C" cap_cv* get_capture_video_stream(const char *path) {
 }
 // ----------------------------------------
 
+extern "C" cap_cv* get_capture_webcam_with_prop(int index, int w, int h, int fps)
+{
+cv::VideoCapture* cap = NULL;
+try {
+    cap = new cv::VideoCapture(index);
+		if(w) cap->set(cv::CAP_PROP_FRAME_WIDTH, w);
+		if(h) cap->set(cv::CAP_PROP_FRAME_HEIGHT, h);
+		if(fps) cap->set(cv::CAP_PROP_FPS, fps);
+}
+catch (...) {
+    cerr << " OpenCV exception: Web-camera " << index << " can't be opened! \n";
+}
+return (cap_cv*)cap;
+}
+
+// ----------------------------------------
+
 extern "C" cap_cv* get_capture_webcam(int index)
 {
     cv::VideoCapture* cap = NULL;
     try {
         cap = new cv::VideoCapture(index);
-        //cap->set(CV_CAP_PROP_FRAME_WIDTH, 1280);
-        //cap->set(CV_CAP_PROP_FRAME_HEIGHT, 960);
+        cap->set(cv::CAP_PROP_FRAME_WIDTH, 640);
+        cap->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     }
     catch (...) {
         cerr << " OpenCV exception: Web-camera " << index << " can't be opened! \n";
@@ -646,6 +692,36 @@ extern "C" mat_cv* get_capture_frame_cv(cap_cv *cap) {
     }
     return (mat_cv *)mat;
 }
+// ----------------------------------------
+
+    extern "C" mat_cv* get_capture_frame_cv_with_timestamp(cap_cv *cap, struct frame_data *f) {
+        cv::Mat *mat = NULL;
+        try {
+            mat = new cv::Mat();
+            if (cap) {
+                cv::VideoCapture &cpp_cap = *(cv::VideoCapture *)cap;
+                if (cpp_cap.isOpened())
+                {
+                    cpp_cap >> *mat;
+
+                    f->frame_timestamp = cpp_cap.get(cv::CAP_PROP_POS_MSEC);
+                    f->frame_sequence = cpp_cap.get(cv::CAP_PROP_POS_FRAMES);
+#ifndef V4L2
+                    //f->select = cpp_cap.get(cv::CAP_PROP_SELECT);
+#endif
+                }
+                else std::cout << " Video-stream stopped! \n";
+            }
+            else cerr << " cv::VideoCapture isn't created \n";
+
+
+        }
+        catch (...) {
+            std::cout << " OpenCV exception: Video-stream stoped! \n";
+        }
+
+        return (mat_cv *)mat;
+    }
 // ----------------------------------------
 
 extern "C" int get_stream_fps_cpp_cv(cap_cv *cap)
@@ -811,6 +887,38 @@ extern "C" image get_image_from_stream_resize(cap_cv *cap, int w, int h, int c, 
 }
 // ----------------------------------------
 
+    extern "C" image get_image_from_stream_resize_with_timestamp(cap_cv *cap, int w, int h, int c, mat_cv** in_img, int dont_close, struct frame_data *f)
+    {
+        c = c ? c : 3;
+        cv::Mat *src = NULL;
+
+        static int once = 1;
+        if (once) {
+            once = 0;
+            do {
+                if (src) delete src;
+                src = (cv::Mat*)get_capture_frame_cv_with_timestamp(cap,f);
+                if (!src) return make_empty_image(0, 0, 0);
+            } while (src->cols < 1 || src->rows < 1 || src->channels() < 1);
+            printf("Video stream: %d x %d \n", src->cols, src->rows);
+        }
+        else
+            //src = (cv::Mat*)get_capture_frame_cv(cap);
+            src = (cv::Mat*)get_capture_frame_cv_with_timestamp(cap, f);
+
+        *(cv::Mat **)in_img = src;
+
+        cv::Mat new_img = cv::Mat(h, w, CV_8UC(c));
+        cv::resize(*src, new_img, new_img.size(), 0, 0, cv::INTER_LINEAR);
+        if (c>1) cv::cvtColor(new_img, new_img, cv::COLOR_RGB2BGR);
+        image im = mat_to_image(new_img);
+
+        //show_image_cv(im, "im");
+        //show_image_mat(*in_img, "in_img");
+        return im;
+    }
+
+    // ----------------------------------------
 extern "C" image get_image_from_stream_letterbox(cap_cv *cap, int w, int h, int c, mat_cv** in_img, int dont_close)
 {
     c = c ? c : 3;
@@ -903,6 +1011,9 @@ extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, flo
         if (!show_img) return;
         static int frame_id = 0;
         frame_id++;
+        extern int num_object;
+	extern int display_index;
+	int k = 0;
 
         for (i = 0; i < num; ++i) {
             char labelstr[4096] = { 0 };
@@ -910,7 +1021,8 @@ extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, flo
             for (j = 0; j < classes; ++j) {
                 int show = strncmp(names[j], "dont_show", 9);
                 if (dets[i].prob[j] > thresh && show) {
-                    if (class_id < 0) {
+                    k++;
+		    if (class_id < 0) {
                         strcat(labelstr, names[j]);
                         class_id = j;
                         char buff[20];
@@ -1027,6 +1139,8 @@ extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, flo
                 // cv::FONT_HERSHEY_COMPLEX_SMALL, cv::FONT_HERSHEY_SIMPLEX
             }
         }
+	num_object = k;
+
         if (ext_output) {
             fflush(stdout);
         }

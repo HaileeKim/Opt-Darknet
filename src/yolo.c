@@ -4,7 +4,8 @@
 #include "utils.h"
 #include "parser.h"
 #include "box.h"
-#include "demo.h"
+//#include "demo.h"
+#include "rtod.h"
 
 char *voc_names[] = {"aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"};
 
@@ -190,6 +191,7 @@ void validate_yolo(char *cfgfile, char *weightfile)
         }
     }
 
+    if (fps) free(fps);
     if (val) free(val);
     if (val_resized) free(val_resized);
     if (buf) free(buf);
@@ -197,12 +199,10 @@ void validate_yolo(char *cfgfile, char *weightfile)
     if (thr) free(thr);
 
     fprintf(stderr, "Total Detection Time: %f Seconds\n", (double)(time(0) - start));
-    if (fps) {
-        for(j = 0; j < classes; ++j){
-            fclose(fps[j]);
-        }
-        free(fps);
+    for(j = 0; j < classes; ++j){
+        fclose(fps[j]);
     }
+    free(fps);
 }
 
 void validate_yolo_recall(char *cfgfile, char *weightfile)
@@ -353,6 +353,11 @@ void run_yolo(int argc, char **argv)
     int cam_index = find_int_arg(argc, argv, "-c", 0);
     int frame_skip = find_int_arg(argc, argv, "-s", 0);
 	int ext_output = find_arg(argc, argv, "-ext_output");
+
+	int w = find_int_arg(argc, argv, "-w", 640);
+	int h = find_int_arg(argc, argv, "-h", 480);
+	int fps = find_int_arg(argc, argv, "-fps", 30);
+
     if(argc < 4){
         fprintf(stderr, "usage: %s %s [train/test/valid] [cfg] [weights (optional)]\n", argv[0], argv[1]);
         return;
@@ -365,6 +370,7 @@ void run_yolo(int argc, char **argv)
     else if(0==strcmp(argv[2], "train")) train_yolo(cfg, weights);
     else if(0==strcmp(argv[2], "valid")) validate_yolo(cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_yolo_recall(cfg, weights);
-    else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, hier_thresh, cam_index, filename, voc_names, 20, 1, frame_skip,
-		prefix, out_filename, mjpeg_port, 0, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
+   // else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, hier_thresh, cam_index, filename, voc_names, 20, frame_skip, prefix, out_filename, mjpeg_port, json_port, dont_show, ext_output, 0, 0, 0, 0, 0, w, h, fps);
+    //else if(0==strcmp(argv[2], "rtod")) rtod(datacfg, cfg, weights, thresh, hier_thresh, cam_index, filename, voc_names, 20, frame_skip, prefix, out_filename, mjpeg_port, json_port, dont_show, ext_output, 0, 0, 0, 0, 0, w, h, fps);
+
 }

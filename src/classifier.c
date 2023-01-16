@@ -6,6 +6,7 @@
 #include "assert.h"
 #include "classifier.h"
 #include "dark_cuda.h"
+#include "rtod.h"
 #ifdef WIN32
 #include <time.h>
 #include "gettimeofday.h"
@@ -1257,15 +1258,9 @@ void demo_classifier(char *datacfg, char *cfgfile, char *weightfile, int cam_ind
     calculate_binary_weights(net);
 
     srand(2222222);
-    cap_cv * cap;
-
-    if(filename){
-        cap = get_capture_video_stream(filename);
-    }else{
-        cap = get_capture_webcam(cam_index);
-    }
 
     int classes = option_find_int(options, "classes", 2);
+    printf("\n%d\n", classes);
     int top = option_find_int(options, "top", 1);
     if (top > classes) top = classes;
 
@@ -1274,24 +1269,45 @@ void demo_classifier(char *datacfg, char *cfgfile, char *weightfile, int cam_ind
 
     int* indexes = (int*)xcalloc(top, sizeof(int));
 
-    if(!cap) error("Couldn't connect to webcam.", DARKNET_LOC);
-    if (!benchmark) create_window_cv("Classifier", 0, 512, 512);
     float fps = 0;
+
+    cap_cv * cap;
+    if(filename){
+        cap = get_capture_video_stream(filename);
+    }else{
+        cap = get_capture_webcam(cam_index);
+    }
+
+    if(!cap) error("Couldn't connect to webcam.", DARKNET_LOC);
+    if (!benchmark) {
+        create_window_cv("Classifier", 0, 512, 512);
+        printf("\rFPS: %.2f  (use -benchmark command line flag for correct measurement)\n", fps);
+    }
+    //float fps = 0;
     int i;
 
     double start_time = get_time_point();
     float avg_fps = 0;
     int frame_counter = 0;
+    int cnt = 0;
+    float avg_fetch_time = 0;
+    float avg_infer_time = 0;
+    float avg_disp_time = 0;
+    float avg_e2e_time = 0;
 
     while(1){
         struct timeval tval_before, tval_after, tval_result;
         gettimeofday(&tval_before, NULL);
 
         //image in = get_image_from_stream(cap);
+
+        // fetch
         image in_s, in;
+	double fetch_start_time = get_time_in_ms();  
         if (!benchmark) {
             in = get_image_from_stream_cpp(cap);
             in_s = resize_image(in, net.w, net.h);
+            printf("w : %d, h : %d", net.w, net.h);
             show_image(in, "Classifier");
         }
         else {
@@ -1300,22 +1316,32 @@ void demo_classifier(char *datacfg, char *cfgfile, char *weightfile, int cam_ind
             in_s = tmp;
         }
 
-        double time = get_time_point();
-        float *predictions = network_predict(net, in_s.data);
-        double frame_time_ms = (get_time_point() - time)/1000;
+        double fetch_time = (get_time_in_ms() - fetch_start_time);
+
+        // inference
+        //double time = get_time_point();
+
+	double infer_start_time = get_time_in_ms();        
+	float *predictions = network_predict(net, in_s.data);
+        //double frame_time_ms = (get_time_in_ms() - time);
+        //double frame_time_ms = (get_time_point() - time)/1000;
         frame_counter++;
 
         if(net.hierarchy) hierarchy_predictions(predictions, net.outputs, net.hierarchy, 1);
         top_predictions(net, top, indexes);
+
+        double infer_time = (get_time_in_ms() - infer_start_time);
 
 #ifndef _WIN32
         printf("\033[2J");
         printf("\033[1;1H");
 #endif
 
-
+        double disp_start_time = get_time_in_ms();
+        // display 
         if (!benchmark) {
-            printf("\rFPS: %.2f  (use -benchmark command line flag for correct measurement)\n", fps);
+            //printf("\rFPS: %.2f  (use -benchmark command line flag for correct measurement)\n", fps);
+            printf("\rFPS: %.2f \t AVG_FPS = %.2f \n", fps, avg_fps);
             for (i = 0; i < top; ++i) {
                 int index = indexes[i];
                 printf("%.1f%%: %s\n", predictions[index] * 100, names[index]);
@@ -1332,21 +1358,37 @@ void demo_classifier(char *datacfg, char *cfgfile, char *weightfile, int cam_ind
             printf("\rFPS: %.2f \t AVG_FPS = %.2f ", fps, avg_fps);
         }
 
+        double disp_time = (get_time_in_ms() - disp_start_time);
+
         //gettimeofday(&tval_after, NULL);
         //timersub(&tval_after, &tval_before, &tval_result);
         //float curr = 1000000.f/((long int)tval_result.tv_usec);
-        float curr = 1000.f / frame_time_ms;
+        float curr = 1000.f / infer_time;
         if (fps == 0) fps = curr;
         else fps = .9*fps + .1*curr;
-
-        float spent_time = (get_time_point() - start_time) / 1000000;
+	avg_fetch_time += fetch_time;
+	avg_infer_time += infer_time;
+	avg_disp_time += disp_time;
+        //float spent_time = (get_time_point() - start_time) / 1000000;
+        float spent_time = (get_time_in_ms() - start_time);
+	avg_e2e_time += spent_time;
+        //printf("spent_time : %f", spent_time);
         if (spent_time >= 3.0f) {
             //printf(" spent_time = %f \n", spent_time);
             avg_fps = frame_counter / spent_time;
             frame_counter = 0;
-            start_time = get_time_point();
+            start_time = get_time_in_ms();
+            //start_time = get_time_point();
         }
+	cnt++;
+	if (cnt == 1024) break;
+
     }
+    printf("Avg fetch execution delay(ms) : %f \n", avg_fetch_time/1024);
+    printf("Avg infer execution delay(ms) : %f \n", avg_infer_time/1024);
+    printf("Avg display execution delay(ms) : %f \n", avg_disp_time/1024);
+    printf("Avg e2e delay(ms) : %f \n", avg_e2e_time/1024);
+    printf("Avg cycle time(ms) : %f \n", avg_fps);
 #endif
 }
 

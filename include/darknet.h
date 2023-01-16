@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #ifndef LIB_API
 #ifdef LIB_EXPORTS
@@ -32,6 +33,8 @@
 #endif
 #endif
 
+
+typedef void* mat_cv;
 #define SECRET_NUM -1234
 
 typedef enum { UNUSED_DEF_VAL } UNUSED_ENUM_TYPE;
@@ -1113,6 +1116,18 @@ LIB_API int fill_remaining_id(detection *new_dets, int new_dets_num, int new_tra
 
 // gemm.h
 LIB_API void init_cpu();
+
+double get_time_in_ms();
+
+struct frame_data {
+	image frame;
+	image resize_frame;
+	void *p_frame;
+	size_t length;
+	double frame_timestamp;
+	int frame_sequence;
+    double select;
+};
 
 #ifdef __cplusplus
 }

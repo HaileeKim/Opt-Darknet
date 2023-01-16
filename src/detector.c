@@ -8,6 +8,7 @@
 #include "box.h"
 #include "demo.h"
 #include "option_list.h"
+#include "rtod.h"
 
 #ifndef __COMPAR_FN_T
 #define __COMPAR_FN_T
@@ -364,7 +365,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
             iter_map = iteration;
             mean_average_precision = validate_detector_map(datacfg, cfgfile, weightfile, thresh, iou_thresh, 0, net.letter_box, &net_map);// &net_combined);
             printf("\n mean_average_precision (mAP@%0.2f) = %f \n", iou_thresh, mean_average_precision);
-            if (mean_average_precision >= best_map) {
+            if (mean_average_precision > best_map) {
                 best_map = mean_average_precision;
                 printf("New best mAP!\n");
                 char buff[256];
@@ -492,7 +493,7 @@ static void print_cocos(FILE *fp, char *image_path, detection *dets, int num_box
             if (dets[i].prob[j] > 0) {
                 char buff[1024];
                 sprintf(buff, "{\"image_id\":%d, \"category_id\":%d, \"bbox\":[%f, %f, %f, %f], \"score\":%f},\n", image_id, coco_ids[j], bx, by, bw, bh, dets[i].prob[j]);
-                fprintf(fp, "%s", buff);
+                fprintf(fp, buff);
                 //printf("%s", buff);
             }
         }
@@ -1998,6 +1999,12 @@ void run_detector(int argc, char **argv)
     int ext_output = find_arg(argc, argv, "-ext_output");
     int save_labels = find_arg(argc, argv, "-save_labels");
     char* chart_path = find_char_arg(argc, argv, "-chart", 0);
+
+
+	int w = find_int_arg(argc, argv, "-w", 640);
+	int h = find_int_arg(argc, argv, "-h", 480);
+	int fps = find_int_arg(argc, argv, "-fps", 30);
+
     if (argc < 4) {
         fprintf(stderr, "usage: %s %s [train/test/valid/demo/map] [data] [cfg] [weights (optional)]\n", argv[0], argv[1]);
         return;
@@ -2045,6 +2052,7 @@ void run_detector(int argc, char **argv)
         int it_num = 100;
         draw_object(datacfg, cfg, weights, filename, thresh, dont_show, it_num, letter_box, benchmark_layers);
     }
+
     else if (0 == strcmp(argv[2], "demo")) {
         list *options = read_data_cfg(datacfg);
         int classes = option_find_int(options, "classes", 20);
@@ -2053,8 +2061,19 @@ void run_detector(int argc, char **argv)
         if (filename)
             if (strlen(filename) > 0)
                 if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
-        demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, avgframes, frame_skip, prefix, out_filename,
-            mjpeg_port, dontdraw_bbox, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers);
+        demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, avgframes, frame_skip, prefix,out_filename, mjpeg_port, dontdraw_bbox, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers);
+
+        free_list_contents_kvp(options);
+        free_list(options);
+    }
+
+    else if (0 == strcmp(argv[2], "rtod")) {
+        list *options = read_data_cfg(datacfg);
+        if (filename)
+            if (strlen(filename) > 0)
+                if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
+        rtod(datacfg, cfg, weights, thresh, hier_thresh, cam_index, filename, frame_skip, prefix, out_filename,
+                mjpeg_port, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers, w, h, fps);
 
         free_list_contents_kvp(options);
         free_list(options);
