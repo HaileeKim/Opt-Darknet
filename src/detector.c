@@ -2043,6 +2043,12 @@ void run_detector(int argc, char **argv)
     int ext_output = find_arg(argc, argv, "-ext_output");
     int save_labels = find_arg(argc, argv, "-save_labels");
     char* chart_path = find_char_arg(argc, argv, "-chart", 0);
+    
+    
+	int w = find_int_arg(argc, argv, "-w", 640);
+	int h = find_int_arg(argc, argv, "-h", 480);
+	int fps = find_int_arg(argc, argv, "-fps", 30);
+	
     if (argc < 4) {
         fprintf(stderr, "usage: %s %s [train/test/valid/demo/map] [data] [cfg] [weights (optional)]\n", argv[0], argv[1]);
         return;
@@ -2100,6 +2106,18 @@ void run_detector(int argc, char **argv)
                 if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
         demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, avgframes, frame_skip, prefix, out_filename,
             mjpeg_port, dontdraw_bbox, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers);
+
+        free_list_contents_kvp(options);
+        free_list(options);
+    }
+    
+    else if (0 == strcmp(argv[2], "rtod")) {
+        list *options = read_data_cfg(datacfg);
+        if (filename)
+            if (strlen(filename) > 0)
+                if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
+        rtod(datacfg, cfg, weights, thresh, hier_thresh, cam_index, filename, frame_skip, prefix, out_filename,
+                mjpeg_port, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers, w, h, fps);
 
         free_list_contents_kvp(options);
         free_list(options);
