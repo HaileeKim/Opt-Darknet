@@ -113,7 +113,7 @@ void forward_network_gpu(network net, network_state state)
     //int read_offset = 0;
 #ifndef DIRECT_IO
     FILE *fp = fopen(weights, "rb");
-    if(!fp) fprintf(stderr,"Can't open!!\n");
+    if(!fp) fprintf(stderr,"Can't open weight file!!\n");
 //    fseek(fp, 20, SEEK_SET);
 #else
     sum_weights_bytes = 0;
@@ -121,7 +121,7 @@ void forward_network_gpu(network net, network_state state)
     mode_t mode = 0644;
     int fp = open(weights, flag, mode);
     if(fp==-1) {
-        fprintf(stderr,"Can't open!!\n");
+        fprintf(stderr,"Can't open weight file!!\n");
         close(fp);
     }
 #endif
@@ -816,14 +816,14 @@ void forward_network_gpu(network net, network_state state)
     int sum_weights_bytes = 0;
     int read_bytes = 0;
 
-	int read_size = 0;
+    int read_size = 0;
     int read_offset = 0;
-	int offset = 0;
-	size_t r_size[net.n] = {0,};
-	int flag = O_RDWR | O_DIRECT;
-	mode_t mode = 0644;
-	int fp = open(weights, flag, mode);
-	if(fp == -1) fprintf(stderr,"Can't open!!\n");
+    int offset = 0;
+    size_t r_size[net.n] = {0,};
+    int flag = O_RDWR | O_DIRECT;
+    mode_t mode = 0644;
+    int fp = open(weights, flag, mode);
+    if(fp == -1) fprintf(stderr,"Can't open weight file!!\n");
 	
 	/***** AIO ON *****/
 	struct aiocb c_aio;

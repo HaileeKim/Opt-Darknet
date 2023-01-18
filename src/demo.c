@@ -73,6 +73,7 @@ extern double image_waiting_sum = 0;
 extern float* predictions[NFRAMES];
 extern float* prediction = 0;
 
+static bool demo_skip_frame = false;
 static const int thread_wait_ms = 1;
 static volatile int run_fetch_in_thread = 0;
 static volatile int run_detect_in_thread = 0;
@@ -291,6 +292,7 @@ void *fetch_in_thread(void *ptr)
                 return 0;
             }
 #else
+
             in_s = get_image_from_stream_resize_with_timestamp(cap, net.w, net.h, net.c, &in_img, dont_close_stream, &frame[buff_index]);
             if(!in_s.data)
             {
@@ -303,7 +305,7 @@ void *fetch_in_thread(void *ptr)
     
             custom_atomic_store_int(&run_fetch_in_thread, 0);
     	}
-    	end_fetch = get_time_in_ms();
+      	end_fetch = get_time_in_ms();
 
         image_waiting_time = frame[buff_index].frame_timestamp - start_fetch;
         image_waiting_time -= fetch_offset;
@@ -341,6 +343,7 @@ void *detect_in_thread(void *ptr)
         start_infer = get_time_in_ms();
         
         layer l = net.layers[net.n - 1];
+        
 #ifdef V4L2
         float *X = frame[detect_index].resize_frame.data;
 #else
@@ -358,10 +361,10 @@ void *detect_in_thread(void *ptr)
         if(net.hierarchy) hierarchy_predictions(prediction, net.outputs, net.hierarchy, 1);
         top_predictions(net, top, indexes);
 #endif
-        
+ 
         cv_images[demo_index] = det_img;
-        det_img = cv_images[(demo_index + avg_frames / 2 + 1) % avg_frames];
-        demo_index = (demo_index + 1) % avg_frames;
+        det_img = cv_images[(demo_index + NFRAMES / 2 + 1) % NFRAMES];
+        demo_index = (demo_index + 1) % NFRAMES;
 
 #ifdef V4L2
         dets = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
@@ -381,7 +384,6 @@ void *detect_in_thread(void *ptr)
     return 0;
 }
 
-#ifdef V4L2
 void *detect_in_thread_sync(void *ptr)
 {
     custom_atomic_store_int(&run_detect_in_thread, 1);
@@ -389,6 +391,7 @@ void *detect_in_thread_sync(void *ptr)
     return 0;
 }
 
+#ifdef V4L2
 void *display_in_thread(void *ptr)
 {
 #ifdef DNN
@@ -574,6 +577,7 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     {
         printf("video file: %s\n", filename);
         cap = get_capture_video_stream(filename);
+        printf("vide=============================\n");
     }
     else
     {
@@ -643,11 +647,12 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     for(j = 0; j < NFRAMES; ++j) predictions[j] = (float *) calloc(l.outputs, sizeof(float));
 
 // WHY??????
+    int i;
     for (i = 0; i < net.n; ++i) 
     {
         layer lc = net.layers[i];
         if (lc.type == YOLO) {
-            lc.mean_alpha = 1.0 / avg_frames;
+            lc.mean_alpha = 1.0 / NFRAMES;
             l = lc;
         }
     }
@@ -703,14 +708,18 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
 
     pthread_t fetch_thread;
     pthread_t inference_thread;
+    if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
+    if (custom_create_thread(&inference_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
     
 #ifndef V4L2
+#ifdef CONTENTION_FREE
     ondemand = check_on_demand();
 
     if(ondemand != 1) { 
         fprintf(stderr, "ERROR : R-TOD needs on-demand capture.\n");
         exit(0);
     }
+#endif
 #endif
     printf("OBJECT DETECTOR INFORMATION:\n"
             "  Capture: \"On-demand capture\"\n"
@@ -733,19 +742,23 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     frame[2].frame = frame[0].frame;
     frame[2].resize_frame = letterbox_image(frame[0].frame, net.w, net.h);
 #else
-    rtod_fetch_thread(0);
+
+
+    fetch_in_thread_sync(0); //fetch_in_thread(0);
     det_img = in_img;
     det_s = in_s;
 
-    rtod_fetch_thread(0);
-    rtod_inference_thread(0);
+    fetch_in_thread_sync(0); //fetch_in_thread(0);
+    detect_in_thread_sync(0); //fetch_in_thread(0);
     det_img = in_img;
     det_s = in_s;
 
+
+    printf("==============================");
     for (j = 0; j < NFRAMES / 2; ++j) {
         free_detections(dets, nboxes);
-        rtod_fetch_thread(0);
-        rtod_inference_thread(0);
+        fetch_in_thread_sync(0); //fetch_in_thread(0);
+        detect_in_thread_sync(0); //fetch_in_thread(0);
         det_img = in_img;
         det_s = in_s;
     }
@@ -810,11 +823,10 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
 
             /* Fork fetch thread */
             if (!benchmark) custom_atomic_store_int(&run_fetch_in_thread, 1); // if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
-            custom_atomic_store_int(&run_detect_in_thread, 1); // if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
 
 #if defined(VANILLA) 
             /* Fork Inference thread */
-            if(pthread_create(&inference_thread, 0, rtod_inference_thread, 0)) perror("Thread creation failed");
+            custom_atomic_store_int(&run_detect_in_thread, 1); // if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
 #endif
 
 	    
@@ -854,7 +866,7 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
             draw_bbox_time = get_time_in_ms() - start_disp;
 
             /* Image display */
-            rtod_display_thread(0);
+            display_in_thread(0);
 
 #else
             /* original display thread */
@@ -1075,7 +1087,7 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     }
     free_ptrs((void **)names, net.layers[net.n - 1].classes);
     
-    int i;
+    //int i;
     const int nsize = 8;
     for (j = 0; j < nsize; ++j) {
         for (i = 32; i < 127; ++i) {
