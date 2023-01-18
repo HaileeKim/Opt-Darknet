@@ -621,10 +621,8 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
 
     net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
     if(weightfile){
-        load_weights(&net, weightfile);
+        net.weights_file_name = weightfile;
         
-// "==========================SSSSSSSSSSSSSOOOOOOOOOOOOOOLLLLLLLLLLLLL"==============
-
 #ifndef TWO_STAGE
         load_weights(&net, weightfile);
 #else
@@ -669,7 +667,7 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     printf("Classifier Demo\n");
     net = parse_network_cfg_custom(cfgfile, 1, 0);
     if(weightfile){
-        load_weights(&net, weightfile);
+        net.weights_file_name = weightfile;
 
 #ifndef TWO_STAGE
         load_weights(&net, weightfile);
@@ -753,14 +751,13 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     det_img = in_img;
     det_s = in_s;
 
-
-    printf("==============================");
     for (j = 0; j < NFRAMES / 2; ++j) {
         free_detections(dets, nboxes);
         fetch_in_thread_sync(0); //fetch_in_thread(0);
         detect_in_thread_sync(0); //fetch_in_thread(0);
         det_img = in_img;
         det_s = in_s;
+        
     }
 #endif
 
@@ -780,6 +777,7 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     {
         int src_fps = 25;
         src_fps = get_stream_fps_cpp_cv(cap);
+        
 #ifndef V4L2
         output_video_writer =
             create_video_writer(out_filename, 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
@@ -803,7 +801,6 @@ void demo(char *datacfg, char *cfgfile, char *weightfile, float thresh, float hi
     int frame_counter = 0;
 
     while(1){
-    printf("=============================== \n");
         ++count;
         {
 #if (defined VANILLA)

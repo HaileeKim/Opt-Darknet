@@ -537,9 +537,9 @@ extern "C" write_cv *create_video_writer(char *out_filename, char c1, char c2, c
 #ifdef CV_VERSION_EPOCH
         new cv::VideoWriter(out_filename, CV_FOURCC(c1, c2, c3, c4), fps, cv::Size(width, height), is_color);
 #else
+
         new cv::VideoWriter(out_filename, cv::VideoWriter::fourcc(c1, c2, c3, c4), fps, cv::Size(width, height), is_color);
 #endif
-
     return (write_cv *)output_video_writer;
     }
     catch (...) {
