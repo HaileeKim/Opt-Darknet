@@ -19,7 +19,7 @@ TWO_STAGE=1
 
 TRADEOFF=1
 
-V4L2=1
+V4L2=0
 CONTENTION_FREE=1
 
 # set GPU=1 and CUDNN=1 to speedup on GPU
