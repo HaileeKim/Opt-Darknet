@@ -70,6 +70,10 @@ void forward_network_gpu(network net, network_state state)
         cudaDeviceSynchronize();
     }
 
+    blas_handle();
+
+    float cur_time = get_time_point();
+    static int infer_count=0;
     //printf("\n");
     state.workspace = net.workspace;
     int i;
@@ -146,7 +150,32 @@ void forward_network_gpu(network net, network_state state)
     }
 
     //cudaStreamSynchronize(get_cuda_stream());   // sync CUDA-functions
-    //cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
+    static double sum_time = 0.;
+    static double infer_time = 0.;
+    infer_time = (get_time_point() - cur_time) / 1000.0;
+
+    static double min_time = 10000.;
+    static double max_time = 0.;
+//    printf("fread time: %lf\n",fread_time/1000);
+//    printf("copy time: %f\n",copy_time/1000);
+//    printf("kernel time: %lf\n",kernel_time/1000);
+//    printf("\ninfer_count: %d\n",infer_count);
+    printf("infer_time : %lf\n",infer_time);
+    if (infer_count > 20){
+        sum_time += infer_time;
+        if (min_time > infer_time) min_time = infer_time;
+        if (max_time < infer_time) max_time = infer_time;
+    }
+    if (infer_count == 120){
+        printf("---> 100 iter avg inference time, min time, max time: %.3lf,  %.3lf, %.3lf\n", sum_time / 100.0, min_time, max_time);
+        sum_time = 0.;
+        min_time = 10000.;
+        max_time = 0.;
+        infer_count = 0;
+    }
+
+    infer_count++;
 }
 
 void backward_network_gpu(network net, network_state state)

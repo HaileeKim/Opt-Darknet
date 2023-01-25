@@ -13,6 +13,8 @@
 #include <sys/time.h>
 #endif
 
+static volatile int flag_exit;  // flag_exit
+
 float validate_classifier_single(char *datacfg, char *filename, char *weightfile, network *existing_net, int topk_custom);
 
 float *get_regression_values(char **labels, int n)
@@ -1264,7 +1266,7 @@ void demo_classifier(char *datacfg, char *cfgfile, char *weightfile, int cam_ind
     }else{
         cap = get_capture_webcam(cam_index);
     }
-
+    int count = 0;  // flag_exit
     int classes = option_find_int(options, "classes", 2);
     int top = option_find_int(options, "top", 1);
     if (top > classes) top = classes;
@@ -1284,69 +1286,73 @@ void demo_classifier(char *datacfg, char *cfgfile, char *weightfile, int cam_ind
     int frame_counter = 0;
 
     while(1){
-        struct timeval tval_before, tval_after, tval_result;
-        gettimeofday(&tval_before, NULL);
+        {  // flag_exit
+		struct timeval tval_before, tval_after, tval_result;
+		gettimeofday(&tval_before, NULL);
 
-        //image in = get_image_from_stream(cap);
-        image in_s, in;
-        if (!benchmark) {
-            in = get_image_from_stream_cpp(cap);
-            in_s = resize_image(in, net.w, net.h);
-            show_image(in, "Classifier");
-        }
-        else {
-            static image tmp;
-            if (!tmp.data) tmp = make_image(net.w, net.h, 3);
-            in_s = tmp;
-        }
+		if(count == 120) flag_exit = 1; // flag_exit
+		//image in = get_image_from_stream(cap);
+		image in_s, in;
+		if (!benchmark) {
+		    in = get_image_from_stream_cpp(cap);
+		    in_s = resize_image(in, net.w, net.h);
+		    show_image(in, "Classifier");
+		}
+		else {
+		    static image tmp;
+		    if (!tmp.data) tmp = make_image(net.w, net.h, 3);
+		    in_s = tmp;
+		}
 
-        double time = get_time_point();
-        float *predictions = network_predict(net, in_s.data);
-        double frame_time_ms = (get_time_point() - time)/1000;
-        frame_counter++;
+		double time = get_time_point();
+		float *predictions = network_predict(net, in_s.data);
+		double frame_time_ms = (get_time_point() - time)/1000;
+		frame_counter++;
+		printf("count %d\n",count); // flag_exit
+		if(net.hierarchy) hierarchy_predictions(predictions, net.outputs, net.hierarchy, 1);
+		top_predictions(net, top, indexes);
 
-        if(net.hierarchy) hierarchy_predictions(predictions, net.outputs, net.hierarchy, 1);
-        top_predictions(net, top, indexes);
-
-#ifndef _WIN32
-        printf("\033[2J");
-        printf("\033[1;1H");
-#endif
+	#ifndef _WIN32
+		//printf("\033[2J");
+		//printf("\033[1;1H");
+	#endif
 
 
-        if (!benchmark) {
-            printf("\rFPS: %.2f  (use -benchmark command line flag for correct measurement)\n", fps);
-            for (i = 0; i < top; ++i) {
-                int index = indexes[i];
-                printf("%.1f%%: %s\n", predictions[index] * 100, names[index]);
-            }
-            printf("\n");
+		if (!benchmark) {
+		    printf("\rFPS: %.2f  (use -benchmark command line flag for correct measurement)\n", fps);
+		    for (i = 0; i < top; ++i) {
+		        int index = indexes[i];
+		        printf("%.1f%%: %s\n", predictions[index] * 100, names[index]);
+		    }
+		    printf("\n");
 
-            free_image(in_s);
-            free_image(in);
+		    free_image(in_s);
+		    free_image(in);
 
-            int c = wait_key_cv(10);// cvWaitKey(10);
-            if (c == 27 || c == 1048603) break;
-        }
-        else {
-            printf("\rFPS: %.2f \t AVG_FPS = %.2f ", fps, avg_fps);
-        }
+		    int c = wait_key_cv(10);// cvWaitKey(10);
+		    if (c == 27 || c == 1048603) break;
+		}
+		else {
+		    printf("\n\rFPS: %.2f \t AVG_FPS = %.2f \n", fps, avg_fps);
+		}
 
-        //gettimeofday(&tval_after, NULL);
-        //timersub(&tval_after, &tval_before, &tval_result);
-        //float curr = 1000000.f/((long int)tval_result.tv_usec);
-        float curr = 1000.f / frame_time_ms;
-        if (fps == 0) fps = curr;
-        else fps = .9*fps + .1*curr;
+		//gettimeofday(&tval_after, NULL);
+		//timersub(&tval_after, &tval_before, &tval_result);
+		//float curr = 1000000.f/((long int)tval_result.tv_usec);
+		float curr = 1000.f / frame_time_ms;
+		if (fps == 0) fps = curr;
+		else fps = .9*fps + .1*curr;
 
-        float spent_time = (get_time_point() - start_time) / 1000000;
-        if (spent_time >= 3.0f) {
-            //printf(" spent_time = %f \n", spent_time);
-            avg_fps = frame_counter / spent_time;
-            frame_counter = 0;
-            start_time = get_time_point();
-        }
-    }
+		float spent_time = (get_time_point() - start_time) / 1000000;
+		if (spent_time >= 3.0f) {
+		    //printf(" spent_time = %f \n", spent_time);
+		    avg_fps = frame_counter / spent_time;
+		    frame_counter = 0;
+		    start_time = get_time_point();
+		}
+		if (flag_exit == 1) break; // flag_exit
+	    } count++;  // flag_exit
+    }  // flag_exit
 #endif
 }
 

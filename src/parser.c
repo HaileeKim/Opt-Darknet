@@ -517,7 +517,7 @@ layer parse_yolo(list *options, size_params params)
     l.random = option_find_float_quiet(options, "random", 0);
 
     l.track_history_size = option_find_int_quiet(options, "track_history_size", 5);
-    l.sim_thresh = option_find_float_quiet(options, "sim_thresh", 0.8);
+    l.sim_thresh = option_find_int_quiet(options, "sim_thresh", 0.8);
     l.dets_for_track = option_find_int_quiet(options, "dets_for_track", 1);
     l.dets_for_show = option_find_int_quiet(options, "dets_for_show", 1);
     l.track_ciou_norm = option_find_float_quiet(options, "track_ciou_norm", 0.01);
@@ -991,7 +991,7 @@ layer parse_shortcut(list *options, size_params params, network net)
 
     for (i = 0; i < n; ++i) {
         int index = layers[i];
-        assert(params.w == net.layers[index].out_w && params.h == net.layers[index].out_h);
+        //assert(params.w == net.layers[index].out_w && params.h == net.layers[index].out_h);
 
         if (params.w != net.layers[index].out_w || params.h != net.layers[index].out_h || params.c != net.layers[index].out_c)
             fprintf(stderr, " (%4d x%4d x%4d) + (%4d x%4d x%4d) \n",

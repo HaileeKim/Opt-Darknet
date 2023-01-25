@@ -191,6 +191,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     cv_images = (mat_cv**)xcalloc(avg_frames, sizeof(mat_cv));
 
     int i;
+
     for (i = 0; i < net.n; ++i) {
         layer lc = net.layers[i];
         if (lc.type == YOLO) {
@@ -212,6 +213,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
     if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
 
+
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     det_img = in_img;
     det_s = in_s;
@@ -221,6 +223,9 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     det_img = in_img;
     det_s = in_s;
 
+    int count = 0;
+    printf("count %d\n",count);
+
     for (j = 0; j < avg_frames / 2; ++j) {
         free_detections(dets, nboxes);
         fetch_in_thread_sync(0); //fetch_in_thread(0);
@@ -229,7 +234,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         det_s = in_s;
     }
 
-    int count = 0;
+
     if(!prefix && !dont_show){
         int full_screen = 0;
         create_window_cv("Demo", full_screen, 1352, 1013);
@@ -267,7 +272,10 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             const float nms = .45;    // 0.4F
             int local_nboxes = nboxes;
             detection *local_dets = dets;
+
             this_thread_yield();
+            printf("count %d\n",count);
+            if(count == 120) flag_exit = 1;
 
             if (!benchmark) custom_atomic_store_int(&run_fetch_in_thread, 1); // if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
             custom_atomic_store_int(&run_detect_in_thread, 1); // if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
@@ -283,7 +291,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             //printf("\033[2J");
             //printf("\033[1;1H");
             //printf("\nFPS:%.1f\n", fps);
-            printf("Objects:\n\n");
+            //printf("Objects:\n\n");
 
             ++frame_id;
             if (demo_json_port > 0) {
@@ -305,7 +313,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             if (!benchmark && !dontdraw_bbox) draw_detections_cv_v3(show_img, local_dets, local_nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
             free_detections(local_dets, local_nboxes);
 
-            printf("\nFPS:%.1f \t AVG_FPS:%.1f\n", fps, avg_fps);
+            printf("\nFPS:%.1f \t AVG_FPS:%.1f\n", fps, avg_fps); 
 
             if(!prefix){
                 if (!dont_show) {
@@ -336,7 +344,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 int jpeg_quality = 40;    // 1 - 100
                 send_mjpeg(show_img, port, timeout, jpeg_quality);
             }
-
             // save video file
             if (output_video_writer && show_img) {
                 write_frame_cv(output_video_writer, show_img);
@@ -344,12 +351,12 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             }
 
             while (custom_atomic_load_int(&run_detect_in_thread)) {
-                if(avg_fps > 50) this_thread_yield();
+                if(avg_fps > 180) this_thread_yield();
                 else this_thread_sleep_for(thread_wait_ms);   // custom_join(detect_thread, 0);
             }
             if (!benchmark) {
                 while (custom_atomic_load_int(&run_fetch_in_thread)) {
-                    if (avg_fps > 50) this_thread_yield();
+                    if (avg_fps > 180) this_thread_yield();
                     else this_thread_sleep_for(thread_wait_ms);   // custom_join(fetch_thread, 0);
                 }
                 free_image(det_s);
@@ -372,7 +379,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         --delay;
         if(delay < 0){
             delay = frame_skip;
-
             //double after = get_wall_time();
             //float curr = 1./(after - before);
             double after = get_time_point();    // more accurate time measurements
@@ -390,13 +396,14 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 start_time = get_time_point();
             }
         }
+
     }
+
     printf("input video stream closed. \n");
     if (output_video_writer) {
         release_video_writer(&output_video_writer);
         printf("output_video_writer closed. \n");
     }
-
     this_thread_sleep_for(thread_wait_ms);
 
     custom_join(detect_thread, 0);

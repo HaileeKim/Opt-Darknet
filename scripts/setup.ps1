@@ -4,8 +4,6 @@ param (
   [switch]$InstallCUDA = $false
 )
 
-Import-Module -Name $PSScriptRoot/utils.psm1 -Force
-
 if ($null -eq (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
   # Download and install Chocolatey
   Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
@@ -18,9 +16,9 @@ Push-Location $PSScriptRoot
 
 if ($InstallCUDA) {
   & $PSScriptRoot/deploy-cuda.ps1
-  $env:CUDA_PATH = "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v${cuda_version_short}"
-  $env:CUDA_TOOLKIT_ROOT_DIR = "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v${cuda_version_short}"
-  $env:CUDACXX = "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v${cuda_version_short}\\bin\\nvcc.exe"
+  $env:CUDA_PATH="C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.6"
+  $env:CUDA_TOOLKIT_ROOT_DIR="C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.6"
+  $env:CUDACXX="C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.6\\bin\\nvcc.exe"
   $CUDAisAvailable = $true
 }
 else {
@@ -33,9 +31,9 @@ else {
 }
 
 if ($CUDAisAvailable) {
-  & $PSScriptRoot/../build.ps1 -UseVCPKG -EnableOPENCV -EnableCUDA -DisableInteractive -DoNotUpdateTOOL
-  #& $PSScriptRoot/../build.ps1 -UseVCPKG -EnableOPENCV -EnableCUDA -EnableOPENCV_CUDA  -DisableInteractive -DoNotUpdateTOOL
+  & $PSScriptRoot/../build.ps1 -UseVCPKG -EnableOPENCV -EnableCUDA -DisableInteractive -DoNotUpdateDARKNET
+  #& $PSScriptRoot/../build.ps1 -UseVCPKG -EnableOPENCV -EnableCUDA -EnableOPENCV_CUDA  -DisableInteractive -DoNotUpdateDARKNET
 }
 else {
-  & $PSScriptRoot/../build.ps1 -UseVCPKG -EnableOPENCV -DisableInteractive -DoNotUpdateTOOL
+  & $PSScriptRoot/../build.ps1 -UseVCPKG -EnableOPENCV -DisableInteractive -DoNotUpdateDARKNET
 }
