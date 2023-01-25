@@ -30,3 +30,12 @@ Darknet memory optimization
 >> trade_off =0 (Only async and two_stage)
 
 4. Excute .sh file
+
+
+
+
+
+If you want to use video file, then V4L2 must be 0
+
+If you want to use webcam, then V4L2 can be 0 or 1
+

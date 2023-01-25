@@ -283,7 +283,7 @@ extern "C" {
         tv.tv_sec = 2;
         tv.tv_usec = 0;
 
-        double select_start = get_time_in_ms();
+        //double select_start = get_time_in_ms();
 
         if(-1 == select(fd + 1, &fds, NULL, NULL, &tv))
 		{
@@ -291,7 +291,7 @@ extern "C" {
 			return -1;
 		}
 
-        f->select = get_time_in_ms() - select_start;
+        //f->select = get_time_in_ms() - select_start;
 
         if(-1 == xioctl(fd, VIDIOC_DQBUF, &buf))
         {

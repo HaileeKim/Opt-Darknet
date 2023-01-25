@@ -15,11 +15,6 @@
 #include <sys/time.h>
 #endif
 
-#ifdef V4L2
-#include "v4l2.h"
-#endif
-
-
 #ifdef OPENCV
 
 #include "http_stream.h"
@@ -31,6 +26,7 @@ int base_mTOT=0;
 int base_mCPU=0;
 int base_mGPU=0;
 #endif
+
 
 extern int buff_index=0;
 
@@ -54,8 +50,6 @@ static volatile int run_fetch_in_thread = 0;
 static volatile int run_detect_in_thread = 0;
 
 
-int *fd_handler = NULL;
-
 void *fetch_in_thread(void *ptr)
 {
     while (!custom_atomic_load_int(&flag_exit)) {
@@ -68,34 +62,15 @@ void *fetch_in_thread(void *ptr)
         int dont_close_stream = 0;    // set 1 if your IP-camera periodically turns off and turns on video-stream
         if (letter_box)
             in_s = get_image_from_stream_letterbox(cap, net.w, net.h, net.c, &in_img, dont_close_stream);
-        else{     
-#ifdef V4L2
-	    if(-1 == capture_image(&frame[buff_index], *fd_handler))
-	    {
-		perror("Fail to capture image");
-		exit(0);
-            }
-            letterbox_image_into(frame[buff_index].frame, net.w, net.h, frame[buff_index].resize_frame);
-            if(!frame[buff_index].resize_frame.data){
-                printf("Stream closed.\n");
-                flag_exit = 1;
-                //exit(EXIT_FAILURE);
-                return 0;
-            }
-            //show_image_cv(frame[buff_index].frame, "Demo");
-            
-#else
+        else
             in_s = get_image_from_stream_resize_with_timestamp(cap, net.w, net.h, net.c, &in_img, dont_close_stream, &frame[buff_index]);
-            if (!in_s.data) {
-                printf("Stream closed.\n");
-                custom_atomic_store_int(&flag_exit, 1);
-                custom_atomic_store_int(&run_fetch_in_thread, 0);
-                //exit(EXIT_FAILURE);
-                return 0;
-            }
-#endif 
+        if (!in_s.data) {
+            printf("Stream closed.\n");
+            custom_atomic_store_int(&flag_exit, 1);
+            custom_atomic_store_int(&run_fetch_in_thread, 0);
+            //exit(EXIT_FAILURE);
+            return 0;
         }
-    
         //in_s = resize_image(in, net.w, net.h);
 
         custom_atomic_store_int(&run_fetch_in_thread, 0);
@@ -119,30 +94,19 @@ void *detect_in_thread(void *ptr)
         }
 
         layer l = net.layers[net.n - 1];
-
-#ifdef V4L2
-        float *X = frame[detect_index].resize_frame.data;
-#else
         float *X = det_s.data;
-#endif
-
         //float *prediction =
         printf("hi \n");
         network_predict(net, X);
-        printf("bye \n");
         
         cv_images[buff_index] = det_img;
         det_img = cv_images[(buff_index + NFRAMES / 2 + 1) % NFRAMES];
         buff_index = (buff_index + 1) % NFRAMES;
-#ifdef V4L2
-        dets = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
-        printf("oboxes = %d", nboxes);
-#else
+
         if (letter_box)
             dets = get_network_boxes(&net, get_width_mat(in_img), get_height_mat(in_img), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
         else
             dets = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
-#endif
 
         //const float nms = .45;
         //if (nms) {
@@ -162,19 +126,6 @@ void *detect_in_thread_sync(void *ptr)
     while (custom_atomic_load_int(&run_detect_in_thread)) this_thread_sleep_for(thread_wait_ms);
     return 0;
 }
-
-#ifdef V4L2
-void *display_in_thread(void *ptr)
-{    
-    int c = show_image_cv(frame[display_index].frame, "Demo");
-    if (c == 27 || c == 1048603) // ESC - exit (OpenCV 2.x / 3.x)
-    {
-        flag_exit = 1;
-    }
-
-    return 0;
-}
-#endif
 
 double get_wall_time()
 {
@@ -306,8 +257,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     int img_h = 480;
     int cam_frame_rate= 30;
     
-    
-    
     net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
     if(weightfile){
         net.weights_file_name = weightfile;
@@ -329,37 +278,21 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 #endif //ONDEMAND_LOAD
     srand(2222222);
     
-        printf("==================================");
     if(filename){
         printf("video file: %s\n", filename);
         cap = get_capture_video_stream(filename);
         demo_skip_frame = is_live_stream(filename);
     }else{
         printf("Webcam index: %d\n", cam_index);
-#ifdef V4L2
-        printf("==================================");
-        char cam_dev[256] = "/dev/video";
-        char index[256];
-        sprintf(index, "%d", cam_index);
-        strcat(cam_dev, index);
-        printf("cam dev : %s\n", cam_dev);
-
-        fd_handler = open_device(cam_dev, cam_frame_rate, img_w, img_h);
-        if(fd_handler ==  NULL)
-        {
-            perror("Couldn't connect to webcam.\n");
-        }
-#else        
         cap = get_capture_webcam_with_prop(cam_index, img_w, img_h, cam_frame_rate);
         demo_skip_frame = true;
+    }
 
-        if (!cap) {
+    if (!cap) {
 #ifdef WIN32
-            printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
+        printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
 #endif
-           error("Couldn't connect to webcam.", DARKNET_LOC);
-        }
-#endif        
+        error("Couldn't connect to webcam.", DARKNET_LOC);
     }
 
     layer l = net.layers[net.n-1];
@@ -388,21 +321,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     custom_thread_t detect_thread = NULL;
     if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
     if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
-    
-#ifdef V4L2
-	if(-1 == capture_image(&frame[buff_index], *fd_handler))
-	{
-		perror("Fail to capture image");
-		exit(0);
-	}
-    frame[0].resize_frame = letterbox_image(frame[0].frame, net.w, net.h);
 
-    frame[1].frame = frame[0].frame;
-    frame[1].resize_frame = letterbox_image(frame[0].frame, net.w, net.h);
-
-    frame[2].frame = frame[0].frame;
-    frame[2].resize_frame = letterbox_image(frame[0].frame, net.w, net.h);
-#else
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     det_img = in_img;
     det_s = in_s;
@@ -411,7 +330,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     detect_in_thread_sync(0); //fetch_in_thread(0);
     det_img = in_img;
     det_s = in_s;
-#endif
 
     int count = 0;
     printf("count %d\n",count);
@@ -436,11 +354,9 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     {
         int src_fps = 25;
         src_fps = get_stream_fps_cpp_cv(cap);
-#ifndef V4L2        
         output_video_writer =
             create_video_writer(out_filename, 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
-     
-#endif
+
         //'H', '2', '6', '4'
         //'D', 'I', 'V', 'X'
         //'M', 'J', 'P', 'G'
@@ -492,20 +408,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 if (l.nms_kind == DEFAULT_NMS) do_nms_sort(local_dets, local_nboxes, l.classes, nms);
                 else diounms_sort(local_dets, local_nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
             }
-#ifdef V4L2
 
-            if (!benchmark) {
-                draw_detections_v3(frame[display_index].frame, local_dets, local_nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
-
-            }
-            free_detections(local_dets, local_nboxes);
-
-            //draw_bbox_time = get_time_in_ms() - start_disp;
-
-            /* Image display */
-            display_in_thread(0);
-
-#else
             if (l.embedding_size) set_track_id(local_dets, local_nboxes, demo_thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
 
             //printf("\033[2J");
@@ -538,11 +441,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             if(!prefix){
                 if (!dont_show) {
                     const int each_frame = max_val_cmp(1, avg_fps / 60);
-                    if(global_frame_counter % each_frame == 0) 
-#ifndef V4L2                    
-                    show_image_mat(show_img, "Demo");
-#endif
-	                        
+                    if(global_frame_counter % each_frame == 0) show_image_mat(show_img, "Demo");
                     int c = wait_key_cv(1);
                     if (c == 10) {
                         if (frame_skip == 0) frame_skip = 60;
@@ -574,8 +473,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 write_frame_cv(output_video_writer, show_img);
                 printf("\n cvWriteFrame \n");
             }
-#endif            
-            
 #ifndef CONTENTION_FREE
             while (custom_atomic_load_int(&run_detect_in_thread)) {
                 if(avg_fps > 180) this_thread_yield();
