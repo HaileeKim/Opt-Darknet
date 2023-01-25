@@ -852,10 +852,10 @@ void forward_network_gpu(network net, network_state state)
 	setlocale(LC_NUMERIC, "");
 
     // Change Your Buffer size Here!
-    int min_buf_size = (max_size_of_n + max_size_of_nweights)/(256*1024); // yolov4, 18
-    int buf_size = (max_size_of_n + max_size_of_nweights) + (p*256*1024); // n-MB
-//    int min_buf_size = 55;
-//    int buf_size = min_buf_size *256*1024 + (p*256*1024); // n-MB
+//    int min_buf_size = (max_size_of_n + max_size_of_nweights)/(256*1024); // yolov4, 18
+//    int buf_size = (max_size_of_n + max_size_of_nweights) + (p*256*1024); // n-MB
+    int min_buf_size = 55;
+    int buf_size = min_buf_size *256*1024 + (p*256*1024); // n-MB
 
 	if (buf_size == max_size_of_n + max_size_of_nweights){
 		buf_size += 1024;

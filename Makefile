@@ -19,6 +19,8 @@ TWO_STAGE=1
 
 TRADEOFF=1
 
+CONTENTION_FREE=0
+
 # set GPU=1 and CUDNN=1 to speedup on GPU
 # set CUDNN_HALF=1 to further speedup 3 x times (Mixed-precision on Tensor Cores) GPU: Volta, Xavier, Turing and higher
 # set AVX=1 and OPENMP=1 to speedup on CPU (if error occurs then set AVX=0)
@@ -93,6 +95,10 @@ CFLAGS=-Wall -Wfatal-errors -Wno-unused-result -Wno-unknown-pragmas -fPIC
 
 ifeq ($(ONDEMAND_LOAD), 1)
 CFLAGS+= -DONDEMAND_LOAD
+endif
+
+ifeq ($(CONTENTION_FREE), 1)
+CFLAGS+= -DCONTENTION_FREE
 endif
 
 ifeq ($(SEQUENTIAL), 1)

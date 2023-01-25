@@ -1122,6 +1122,16 @@ LIB_API void set_track_id(detection *new_dets, int new_dets_num, float thresh, f
 LIB_API int fill_remaining_id(detection *new_dets, int new_dets_num, int new_track_id, float thresh);
 
 
+struct frame_data {
+	image frame;
+	image resize_frame;
+	void *p_frame;
+	size_t length;
+	double frame_timestamp;
+	int frame_sequence;
+    double select;
+};
+
 // gemm.h
 LIB_API void init_cpu();
 
